@@ -5,10 +5,12 @@
 SoftwareSerial BTSerial(A0, A1); // RX | TX
 LiquidCrystal_I2C lcd(0x27,16,2);
 
+const int MPU_addr=0x68; 
+
 boolean down = false;
 boolean autoMode = false;
 
-char commands[8];
+char commands[10];
 
 void setup()
 {
@@ -27,7 +29,34 @@ void setup()
 
   lcd.init();
   lcd.backlight();
+
+  setupMPU();
   
+}
+
+void setupMPU(){
+  Wire.begin();
+  Wire.beginTransmission(MPU_addr);
+  Wire.write(0x6B);  // PWR_MGMT_1 register
+  Wire.write(0);     // set to zero (wakes up the MPU-6050)
+  Wire.endTransmission(true);
+}
+
+long readMPU(){
+  Wire.beginTransmission(MPU_addr);
+  Wire.write(0x43);  // starting with gyro reg
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU_addr,6,true);  // request a total of 14 registers
+  while(Wire.available() < 6);
+  long gyroX = Wire.read()<<8|Wire.read(); //Store first two bytes into accelX
+  long gyroY = Wire.read()<<8|Wire.read(); //Store middle two bytes into accelY
+  long gyroZ = Wire.read()<<8|Wire.read(); //Store last two bytes into accelZ
+
+  gyroX = gyroX / 131.0;
+  gyroY = (gyroY / 131.0) - 0.55;
+  gyroZ = gyroZ / 131.0;
+
+  return gyroZ;
 }
 
 int getDistance(){
@@ -46,14 +75,13 @@ int getDistance(){
 
 void loop()
 {  
-    if (BTSerial.available() > 6){
+    if ( BTSerial.available() > 6){
        int x = 0;
-       while(x < 7){
+       while(x <= 6){
          commands[x] = BTSerial.read();
-         BTSerial.println(commands[x]);
          x++;
        } 
-       BTSerial.flush();    
+       BTSerial.flush();  
     }
 
     if(commands[4] == '1'){
@@ -65,13 +93,14 @@ void loop()
     }
 
     if(autoMode){
-      autoDriveMode();
+      autoDriveModeLine();
+     
     }
 
      if(!autoMode){
        manualDriveMode();
      }
-
+// autoDriveMode();
 
 }
 
@@ -81,18 +110,18 @@ void updateLCD(){
        if(down){
         lcd.clear();
         lcd.setCursor(0,0);
-        lcd.print("Thank you");
+        lcd.print("U kan");
         lcd.setCursor(0,1);
-        lcd.print("Daddy ;)");
+        lcd.print("beginnen;)");
         down = false;
        }
     }else{
       if(!down){
           lcd.clear();
           lcd.setCursor(0,0);
-          lcd.print("Put me down");
+          lcd.print("Zet mij neer");
           lcd.setCursor(0,1);
-          lcd.print("daddy");
+          lcd.print("om te starten");
           down = true;
       }
     }
@@ -100,6 +129,29 @@ void updateLCD(){
 }
 
 void autoDriveMode(){
+   long z = readMPU();
+
+   if(z > 20){
+    analogWrite(9, 0); 
+    analogWrite(3, 100);
+
+   }
+
+   if(z < -20){
+    analogWrite(3, 0);
+    analogWrite(9, 100);
+
+   }
+
+   if(z <= 20 && z >= -20){
+     analogWrite(3, 80);
+     analogWrite(9, 82);
+   }
+   delay(150);
+  
+}
+
+void autoDriveModeLine(){
   
   updateLCD();
   
@@ -149,8 +201,8 @@ void autoDriveMode(){
 void manualDriveMode(){
 
     if(commands[0] == '1'){
-      analogWrite(3, 100);
-      analogWrite(9, 100);
+      analogWrite(3, 255);
+      analogWrite(9, 255);
 
       analogWrite(2, 0);
       analogWrite(4, 0);
@@ -166,13 +218,13 @@ void manualDriveMode(){
   
     //Links
     if(commands[2] == '1'){
-      analogWrite(9, 100);
+      analogWrite(9, 160);
       analogWrite(3, 0);
     }
 
     //Rechts
     if(commands[3] == '1'){
-      analogWrite(3, 100);
+      analogWrite(3, 160);
       analogWrite(9, 0);
     }
 
@@ -181,7 +233,7 @@ void manualDriveMode(){
       analogWrite(3, 0);
       analogWrite(9, 0);
 
-       analogWrite(2, 0);
+      analogWrite(2, 0);
       analogWrite(4, 0);
     }
   
